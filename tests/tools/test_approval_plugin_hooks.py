@@ -143,6 +143,60 @@ class TestCliPathFiresHooks:
         assert result["approved"] is True
 
 
+class TestOtherCliPromptsFireHooks:
+    """Every CLI prompt that waits on a human is bracketed by the observer hooks."""
+
+    @pytest.fixture
+    def events(self, monkeypatch):
+        monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
+        monkeypatch.delenv("HERMES_EXEC_ASK", raising=False)
+        log = []
+        with patch("hermes_cli.plugins.invoke_hook",
+                   side_effect=lambda name, **kw: log.append((name, kw))):
+            yield log
+
+    def test_protected_instruction_write_prompt(self, isolated_session, events, monkeypatch, tmp_path):
+        import tools.file_tools_write_guards as guards
+        from tools.terminal_tool import set_approval_callback
+
+        monkeypatch.setattr(guards, "_protected_instruction_config", lambda: (True, []))
+
+        def cb(command, description, **kwargs):
+            events.append(("prompt", {}))
+            return "once"
+
+        set_approval_callback(cb)
+        try:
+            assert guards._check_protected_instruction_write([str(tmp_path / "AGENTS.md")]) is None
+        finally:
+            set_approval_callback(None)
+
+        assert [name for name, _ in events] == ["pre_approval_request", "prompt", "post_approval_response"]
+        pre, post = events[0][1], events[2][1]
+        assert pre["surface"] == post["surface"] == "cli"
+        assert pre["pattern_key"] == "protected_instruction_file"
+        assert pre["session_key"] == isolated_session
+        assert post["choice"] == "once"
+
+    def test_elicitation_consent_prompt(self, isolated_session, events, monkeypatch):
+        from tools import approval_prompt
+
+        def prompt(*args, **kwargs):
+            events.append(("prompt", {}))
+            return "deny"
+
+        monkeypatch.setattr(approval_prompt, "prompt_dangerous_approval", prompt)
+        verdict = approval_prompt.request_elicitation_consent(
+            "srv is asking", "confirm", surface="mcp-elicitation/srv")
+
+        assert verdict == "decline"
+        assert [name for name, _ in events] == ["pre_approval_request", "prompt", "post_approval_response"]
+        pre, post = events[0][1], events[2][1]
+        assert pre["surface"] == post["surface"] == "mcp-elicitation/srv"
+        assert pre["session_key"] == isolated_session
+        assert post["choice"] == "deny"
+
+
 class TestSmartModeFiresHooks:
     def _configure(self, monkeypatch, verdict):
         monkeypatch.setenv("HERMES_INTERACTIVE", "1")

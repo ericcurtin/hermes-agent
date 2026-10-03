@@ -281,9 +281,10 @@ def _request_protected_instruction_approval(reasons: list[str], task_id: str = "
         import tools.approval as _approval
         from tools.approval_context import get_current_session_key
         from tools.approval_gateway_wait import _await_gateway_decision
-        from tools.approval_prompt import prompt_dangerous_approval
+        from tools.approval_prompt import prompt_with_approval_hooks
     except Exception:
         return blocked.format(why=_APPROVAL_UNAVAILABLE)
+    pattern_key = "protected_instruction_file"
 
     # Gateway surface: block on the button round-trip when a notify callback
     # is registered for this session. One-operation only — no scope buttons.
@@ -297,8 +298,8 @@ def _request_protected_instruction_approval(reasons: list[str], task_id: str = "
     if notify_cb is not None:
         approval_data = {
             "command": display,
-            "pattern_key": "protected_instruction_file",
-            "pattern_keys": ["protected_instruction_file"],
+            "pattern_key": pattern_key,
+            "pattern_keys": [pattern_key],
             "description": description,
             "allow_permanent": False,
             "allow_session": False}
@@ -319,8 +320,9 @@ def _request_protected_instruction_approval(reasons: list[str], task_id: str = "
             # No human channel (script, cron, background thread): fail closed —
             # auto-approving here would recreate the persistence vector.
             return blocked.format(why=_NO_HUMAN)
-        choice = prompt_dangerous_approval(
-            display, description, allow_permanent=False, allow_session=False, approval_callback=callback)
+        choice = prompt_with_approval_hooks(
+            display, description, pattern_key=pattern_key, session_key=session_key,
+            allow_permanent=False, allow_session=False, approval_callback=callback)
         if choice == "cancelled":
             return blocked.format(why="approval prompt could not be delivered or was not answered "
                                       f"({getattr(choice, 'cause', 'no answer')}).")

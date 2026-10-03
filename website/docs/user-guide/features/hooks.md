@@ -1315,7 +1315,7 @@ This hook is observer-only: it does **not** add raw-event access or adapter acce
 
 ### `pre_approval_request`
 
-Fires before an approval decision is requested. It covers prompted surfaces—interactive CLI, Ink TUI, gateway platforms, and ACP clients—and `approvals.mode=smart` decisions made without a human prompt (`surface="smart"`). In smart mode, the hook runs before the auxiliary LLM is called.
+Fires before an approval decision is requested. It covers every prompt that waits on a human (command approvals, protected agent-instruction file writes, MCP and vault consent) on the interactive CLI, gateway platforms (including the Ink TUI and Desktop), and ACP clients, and `approvals.mode=smart` decisions made without a human prompt (`surface="smart"`). In smart mode, the hook runs before the auxiliary LLM is called.
 
 This is the right place to wire a custom notifier — for example, a macOS menu-bar app that pops an allow/deny notification, or an audit log that records every approval request with context.
 
@@ -1340,7 +1340,7 @@ def my_callback(
 | `pattern_key` | `str` | Primary pattern key that triggered the approval (e.g. `"rm_rf"`, `"sudo"`) |
 | `pattern_keys` | `list[str]` | All pattern keys that matched |
 | `session_key` | `str` | Session identifier, useful for scoping notifications per-chat |
-| `surface` | `str` | `"cli"` for interactive CLI/TUI prompts, `"gateway"` for async platform approvals, or `"smart"` for auxiliary-LLM auto approve/deny decisions |
+| `surface` | `str` | `"cli"` for interactive CLI prompts, `"gateway"` for async platform approvals (the Ink TUI and Desktop report this too), `"smart"` for auxiliary-LLM auto approve/deny decisions, `"transport:<name>"` for a plugin approval transport, or the consent kind (`"mcp-elicitation/<server>"`, `"mcp-trust/<server>"`, `"vault-payment"`) for MCP and vault prompts. `pattern_key` tells a protected agent-instruction write (`"protected_instruction_file"`) from a consent prompt (`"mcp_elicitation"`) |
 
 **Return value:** ignored. Hooks here are observer-only; they cannot veto or pre-answer the approval. Use [`pre_tool_call`](#pre_tool_call) to block a tool before it reaches the approval system.
 

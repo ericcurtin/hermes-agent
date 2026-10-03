@@ -53,6 +53,19 @@ def prompt_dangerous_approval(command: str, description: str, timeout_seconds: i
                           approval_callback, allow_session, smart_denied, title=title)
 
 
+def prompt_with_approval_hooks(command: str, description: str, *, pattern_key: str, session_key: str,
+                               surface: str = "cli", pattern_keys: list[str] | None = None, **prompt_kwargs) -> str:
+    """:func:`prompt_dangerous_approval` bracketed by the observer hooks, so every CLI prompt that waits on a
+    human is visible to ``pre_approval_request`` / ``post_approval_response`` plugins. Hooks get *command* and
+    *description* as given; redact first where the gateway path would."""
+    hook_kwargs = dict(command=command, description=description, pattern_key=pattern_key,
+                       pattern_keys=list(pattern_keys or [pattern_key]), session_key=session_key, surface=surface)
+    _ctx._fire_approval_hook("pre_approval_request", **hook_kwargs)
+    choice = prompt_dangerous_approval(command, description, **prompt_kwargs)
+    _ctx._fire_approval_hook("post_approval_response", **hook_kwargs, choice=choice)
+    return choice
+
+
 class Unanswered(str):
     """Choice ``"cancelled"`` carrying the reason nobody answered. Compares equal to the gateway's
     withdrawn-prompt choice so every consumer already handling ``cancelled`` fails closed without
@@ -274,6 +287,9 @@ def _transport_choice(attempt: dict, *, pattern_key: str, description: str):
     )
 
 
+_ELICITATION_KEY = "mcp_elicitation"
+
+
 def _consent(choice, unresolved: str) -> str:
     """Map an approval choice to an elicitation verdict; *unresolved* is the no-answer outcome."""
     if choice in ("once", "session", "always"):
@@ -315,8 +331,8 @@ def request_elicitation_consent(message: str, description: str, *,
         try:
             decision = _gw._await_gateway_decision(
                 session_key, notify_cb, {"command": message, "description": description,
-                                         "pattern_key": "mcp_elicitation",
-                                         "pattern_keys": ["mcp_elicitation"]}, surface=surface)
+                                         "pattern_key": _ELICITATION_KEY,
+                                         "pattern_keys": [_ELICITATION_KEY]}, surface=surface)
         except Exception as exc:
             logger.error("Elicitation gateway dispatch failed: %s", exc, exc_info=True)
             return "decline"
@@ -328,8 +344,9 @@ def request_elicitation_consent(message: str, description: str, *,
 
     # allow_permanent=False: elicitation is a per-call confirmation — no pattern to remember.
     try:
-        choice = prompt_dangerous_approval(message, description, timeout_seconds=timeout_seconds,
-                                           allow_permanent=False, title=title)
+        choice = prompt_with_approval_hooks(message, description, pattern_key=_ELICITATION_KEY,
+                                            session_key=session_key, surface=surface,
+                                            timeout_seconds=timeout_seconds, allow_permanent=False, title=title)
     except Exception as exc:
         logger.error("Elicitation CLI prompt failed: %s", exc, exc_info=True)
         return "decline"

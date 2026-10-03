@@ -143,7 +143,8 @@ VALID_HOOKS: Set[str] = {
     "agent_loop_stopped",
     # Approval observers (tools/approval.py); returns ignored — plugins cannot veto or pre-answer
     # (use pre_tool_call). Kwargs: command, description, pattern_key, pattern_keys, session_key,
-    # surface: "cli"|"gateway"|"smart"; post_approval_response adds choice ("once"|"session"|
+    # surface: "cli"|"gateway"|"smart"|"transport:<name>"|"mcp-elicitation/<server>"|"mcp-trust/<server>"|
+    # "vault-payment"; post_approval_response adds choice ("once"|"session"|
     # "always"|"deny"|"timeout"|"smart_approve"|"smart_deny") and decided_by.
     "pre_approval_request", "post_approval_response",
     # on_room_member_activity: a hosted Group Chat member's live runtime events (tool.started/completed,

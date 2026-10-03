@@ -36,7 +36,9 @@ from tools.approval_floors import (
     _user_deny_block_result,
 )
 from tools.approval_gateway_wait import _await_gateway_decision
-from tools.approval_prompt import _present_with_selected_transport, _transport_choice, prompt_dangerous_approval
+from tools.approval_prompt import (
+    _present_with_selected_transport, _transport_choice, prompt_dangerous_approval, prompt_with_approval_hooks,
+)
 from tools.approval_smart import _smart_verdict
 
 logger = logging.getLogger(__name__)
@@ -909,12 +911,10 @@ def _human_decision(spec: _GateSpec, *, command: str, description: str,
     if spec.redact_cli:
         prompt_command = redact_sensitive_text(command)
         prompt_description = redact_sensitive_text(description)
-    hook_kwargs = dict(command=prompt_command, description=prompt_description, pattern_key=pattern_key,
-                       pattern_keys=list(pattern_keys), session_key=session_key, surface="cli")
-    approval_context._fire_approval_hook("pre_approval_request", **hook_kwargs)
-    choice = prompt_dangerous_approval(prompt_command, prompt_description, allow_permanent=allow_permanent,
-                                       smart_denied=smart_denied, approval_callback=approval_callback)
-    approval_context._fire_approval_hook("post_approval_response", **hook_kwargs, choice=choice)
+    choice = prompt_with_approval_hooks(prompt_command, prompt_description, pattern_key=pattern_key,
+                                        pattern_keys=pattern_keys, session_key=session_key,
+                                        allow_permanent=allow_permanent, smart_denied=smart_denied,
+                                        approval_callback=approval_callback)
     if choice == "timeout":
         return deny(spec.cli_timeout, "timeout")
     if choice == "cancelled":
